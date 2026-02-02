@@ -5,17 +5,19 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      devOptions: {
-        enabled: true
-      },
+      injectRegister: 'auto',
+      strategies: 'generateSW',
+      filename: 'manifest.webmanifest',
+      includeAssets: ['pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
-        name: 'Sanatan Vibes AI',
-        short_name: 'SanatanVibes',
-        description: 'Sanatan Vibes AI App',
-        theme_color: '#ff9933',
+        name: 'EquiBalance',
+        short_name: 'EquiBalance',
+        description: 'Personal debt and finance tracker',
+        theme_color: '#4f46e5',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
+        scope: '/',
         icons: [
           {
             src: '/pwa-192x192.png',
