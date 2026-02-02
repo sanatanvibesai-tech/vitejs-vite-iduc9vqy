@@ -1,0 +1,658 @@
+import './style.css';
+import { FinanceEngine } from './engine/FinanceEngine.js';
+import { Income } from './engine/Income.js';
+import { Expense } from './engine/Expense.js';
+import { Debt } from './engine/Debt.js';
+
+/* ==================== 1. STATE & STORAGE ==================== */
+let activeChart = null;
+let selectedDebtId = null;
+let editingDebtId = null; // Track debt being edited
+let editingPaymentIdx = null;
+let editingIncomeIdx = null;
+let editingExpenseIdx = null;
+
+const fmt = (n) =>
+  new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(n || 0);
+const val = (id) => document.getElementById(id).value;
+const num = (id) => Number(val(id));
+
+const ICONS = {
+  dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>`,
+  debts: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>`,
+  income: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>`,
+  expenses: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18v16l-3-2-3 2-3-2-3 2-3-2-3 2V4z"></path><line x1="8" y1="10" x2="16" y2="10"></line><line x1="8" y1="14" x2="14" y2="14"></line></svg>`,
+  payments: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>`,
+  history: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+};
+
+const STORAGE_KEY = 'finance-engine-v1';
+let engine = loadEngine();
+
+function loadEngine() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return new FinanceEngine();
+  try {
+    return FinanceEngine.fromJSON(JSON.parse(raw));
+  } catch {
+    return new FinanceEngine();
+  }
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(engine.toJSON()));
+}
+
+/* ==================== 2. UI TEMPLATE ==================== */
+document.querySelector('#app').innerHTML = `
+<div class="app">
+  <header style="padding: 20px 0; text-align: center; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); margin-bottom: 20px; border-radius: 0 0 24px 24px;">
+    <h1 style="margin: 0; font-size: 24px; color: #f8fafc; font-weight: 800;">Equi<span style="color: #38bdf8;">Balance</span></h1>
+  </header>
+
+  <main>
+    <section id="dashboard" class="tab-content">
+       <div class="card primary"><p style="opacity:0.8; margin:0; font-size:11px; font-weight:700;">TOTAL DEBT</p><h2 id="dashTotal" style="margin:5px 0 0; font-size:32px;">₹0</h2></div>
+       <div class="grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="card">
+            <p style="color:var(--text-muted); margin:0; font-size:10px;">INCOME</p>
+            <h3 id="dashInc" style="color:#10b981; font-size:16px;">₹0</h3>
+          </div>
+
+          <div class="card">
+            <p style="color:var(--text-muted); margin:0; font-size:10px;">EXPENSES</p>
+            <h3 id="dashExp" style="color:#f59e0b; font-size:16px;">₹0</h3>
+          </div>
+
+          <div class="card">
+            <p style="color:var(--text-muted); margin:0; font-size:10px;">MONTHLY EMIs</p>
+            <h3 id="dashEmi" style="color:#ef4444; font-size:16px;">₹0</h3>
+          </div>
+
+          <div class="card">
+            <p style="color:var(--text-muted); margin:0; font-size:10px;">SURPLUS</p>
+            <h3 id="dashSurplus" style="color:#10b981; font-size:16px;">₹0</h3>
+          </div>
+        </div>
+
+       <div class="card">
+         <div style="height: 220px; width: 100%; position: relative;"><canvas id="ctxChart"></canvas></div>
+       </div>
+    </section>
+
+    <section id="debts" class="tab-content">
+      <div class="card">
+        <h2 id="debtFormTitle" style="font-size:1.1rem; margin-top:0;">Add Debt</h2>
+        <input id="debtName" placeholder="Debt Name">
+        <input id="debtAmount" type="number" placeholder="Principal ₹">
+        <div style="display:flex; gap:10px; margin-top:10px;">
+           <input id="debtRate" type="number" placeholder="Rate %" style="flex:1">
+           <select id="interestType" style="flex:1"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select>
+        </div>
+        <input id="minEmi" type="number" placeholder="EMI Amount ₹" style="margin-top:10px;">
+        <button id="saveDebtBtn">Save Debt Account</button>
+        <button id="cancelDebtEdit" style="display:none; background:#ccc; margin-top:10px;">Cancel Edit</button>
+      </div>
+      <div id="debtList"></div>
+    </section>
+
+    <section id="income" class="tab-content">
+       <div class="card">
+         <h2 style="font-size:1.1rem; margin-top:0;">Income Sources</h2>
+         <input id="incName" placeholder="Employer Name"><input id="incAmt" type="number" placeholder="Monthly ₹">
+         <button id="saveIncBtn">Add Income</button>
+       </div>
+       <div id="incomeList"></div>
+    </section>
+
+    <section id="expenses" class="tab-content">
+      <div class="card">
+        <h2 style="font-size:1.1rem; margin-top:0;">Monthly Expenses</h2>
+
+        <input id="expName" placeholder="Expense name (Rent, Grocery)">
+        <input id="expAmt" type="number" placeholder="Amount ₹">
+
+        <select id="expFreq">
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+          <option value="daily">Daily</option>
+        </select>
+
+        <button id="saveExpBtn">Add Expense</button>
+      </div>
+
+      <div id="expenseList"></div>
+    </section>
+
+    <section id="payments" class="tab-content">
+      <div class="card">
+        <h2 id="payFormTitle" style="font-size:1.1rem; margin-top:0;">Record Payment</h2>
+        <select id="payDebtSelect"></select>
+        <input id="payAmt" type="number" placeholder="Amount Paid ₹">
+        <input id="payDate" type="date" style="margin-top:10px;">
+        <button id="payBtn">Submit Payment</button>
+        <button id="cancelPayEdit" style="display:none; background:#ccc; margin-top:10px;">Cancel Edit</button>
+      </div>
+    </section>
+
+    <section id="debtDetail" class="tab-content">
+      <div class="card">
+        <label style="font-size:11px; font-weight:700;">Select Account</label>
+        <select id="detailSelect" style="width:100%; border:none; background:transparent; font-size:16px; font-weight:bold; outline:none;"></select>
+      </div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr style="text-align:left; font-size:10px; border-bottom:1px solid #eee;">
+               <th style="padding:12px;">DATE</th>
+               <th style="padding:12px;">PAID</th>
+               <th style="padding:12px;">BAL.</th>
+               <th style="padding:12px; text-align:right;">ACTION</th>
+            </tr>
+          </thead>
+          <div id="historyBody"></div>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button class="tab" data-tab="dashboard">${ICONS.dashboard}Home</button>
+    <button class="tab" data-tab="debts">${ICONS.debts}Debt</button>
+    <button class="tab" data-tab="income">${ICONS.income}Income</button>
+    <button class="tab" data-tab="expenses">${ICONS.expenses}Expense</button>
+    <button class="tab" data-tab="payments">${ICONS.payments}Pay</button>
+    <button class="tab" data-tab="debtDetail">${ICONS.history}History</button>
+  </nav>
+</div>
+`;
+
+/* ==================== 3. FUNCTIONS ==================== */
+
+function switchTab(tabId) {
+  document
+    .querySelectorAll('.tab')
+    .forEach((btn) =>
+      btn.classList.toggle('active', btn.dataset.tab === tabId)
+    );
+  document
+    .querySelectorAll('.tab-content')
+    .forEach((sec) => sec.classList.toggle('active', sec.id === tabId));
+  if (tabId === 'dashboard') renderDashboard();
+  if (tabId === 'debts') renderDebts();
+  if (tabId === 'income') renderIncome();
+  if (tabId === 'expenses') renderExpenses();
+  if (tabId === 'payments') renderPayments();
+  if (tabId === 'debtDetail') renderDebtDetailTab();
+}
+
+document
+  .querySelectorAll('.tab')
+  .forEach((btn) => (btn.onclick = () => switchTab(btn.dataset.tab)));
+
+// DEBT RENDER & ACTIONS
+function renderDebts() {
+  document.getElementById('debtList').innerHTML = engine.debts
+    .map(
+      (d) => `
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <b>${d.name}</b>
+        <p style="margin:0; font-size:11px; color:gray;">Next EMI: ₹${fmt(
+          d.emiAmount
+        )}</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <b style="color:var(--brand);">₹${fmt(d.summary().pendingPrincipal)}</b>
+        <div style="display:flex; gap:10px; font-size:14px;">
+           <span onclick="editDebt(${
+             d.id
+           })" style="cursor:pointer; color:#4f46e5;">✎</span>
+           <span onclick="deleteDebt(${
+             d.id
+           })" style="cursor:pointer; color:#ef4444;">✖</span>
+        </div>
+      </div>
+    </div>`
+    )
+    .join('');
+}
+
+window.editDebt = (id) => {
+  const debtId = Number(id); // 🔑 FORCE NUMBER
+  const d = engine.debts.find((x) => x.id === debtId);
+  if (!d) return;
+
+  editingDebtId = debtId; // 🔑 STORE NUMBER
+
+  document.getElementById('debtFormTitle').innerText = 'Edit Debt Account';
+  document.getElementById('debtName').value = d.name;
+  document.getElementById('debtAmount').value = d.principal;
+  document.getElementById('debtRate').value = d.interestRate * 100;
+  document.getElementById('minEmi').value = d.emiAmount;
+  document.getElementById('cancelDebtEdit').style.display = 'block';
+
+  document.getElementById('debtFormTitle').scrollIntoView();
+
+  // ✅ Debug proof (remove later)
+  console.log('EDIT MODE:', editingDebtId);
+};
+
+window.deleteDebt = (id) => {
+  if (confirm('Delete this debt and all associated history?')) {
+    engine.debts = engine.debts.filter((d) => d.id !== id);
+    save();
+    renderDebts();
+  }
+};
+
+document.getElementById('cancelDebtEdit').onclick = () => {
+  editingDebtId = null;
+  document.getElementById('debtFormTitle').innerText = 'Add Debt';
+  document.getElementById('cancelDebtEdit').style.display = 'none';
+  ['debtName', 'debtAmount', 'debtRate', 'minEmi'].forEach(
+    (id) => (document.getElementById(id).value = '')
+  );
+};
+
+document.getElementById('saveDebtBtn').onclick = () => {
+  const data = {
+    name: val('debtName'),
+    principal: num('debtAmount'),
+    interestRate: num('debtRate') / 100,
+    interestType: val('interestType'),
+    emiAmount: num('minEmi'),
+    plan: 'custom',
+  };
+
+  if (editingDebtId !== null) {
+    const idx = engine.debts.findIndex((d) => d.id === editingDebtId);
+    const oldDebt = engine.debts[idx];
+
+    // 🔑 Rebuild a CLEAN Debt (edit = restructure)
+    const rebuilt = new Debt({
+      id: oldDebt.id,
+      name: data.name,
+      principal: data.principal,
+      interestRate: data.interestRate,
+      interestType: data.interestType,
+      plan: data.plan,
+      emiAmount: data.emiAmount,
+      startDate: oldDebt.startDate, // ✅ KEEP original start date
+      endDate: oldDebt.endDate ?? null,
+    });
+
+    // Policy: reset history on edit
+    rebuilt.payments = [];
+    rebuilt.interestPaid = 0;
+
+    engine.debts[idx] = rebuilt;
+
+    // exit edit mode
+    editingDebtId = null;
+    document.getElementById('debtFormTitle').innerText = 'Add Debt';
+    document.getElementById('cancelDebtEdit').style.display = 'none';
+  } else {
+    engine.addDebt({
+      ...data,
+      startDate: new Date(), // only for NEW debt
+    });
+  }
+
+  save();
+
+  // clear form
+  ['debtName', 'debtAmount', 'debtRate', 'minEmi'].forEach(
+    (id) => (document.getElementById(id).value = '')
+  );
+
+  // 🔑 FULL re-render
+  renderDebts();
+  renderPayments();
+  renderDashboard();
+};
+
+function renderDashboard() {
+  const income = engine.incomes.reduce((sum, i) => sum + (i.amount || 0), 0);
+
+  const expenses = engine.expenses
+    ? engine.expenses.reduce((sum, e) => sum + e.monthlyValue(), 0)
+    : 0;
+
+  const totalEmi = engine.debts.reduce((sum, d) => sum + (d.emiAmount || 0), 0);
+
+  const surplus = income - expenses - totalEmi;
+
+  const totalDebt = engine.debts.reduce(
+    (sum, d) => sum + Math.max(0, d.principal),
+    0
+  );
+
+  document.getElementById('dashTotal').innerText = `₹${fmt(totalDebt)}`;
+  document.getElementById('dashInc').innerText = `₹${fmt(income)}`;
+  document.getElementById('dashExp').innerText = `₹${fmt(expenses)}`;
+  document.getElementById('dashEmi').innerText = `₹${fmt(totalEmi)}`;
+  document.getElementById('dashSurplus').innerText = `₹${fmt(surplus)}`;
+
+  if (activeChart) activeChart.destroy();
+
+  const ctx = document.getElementById('ctxChart').getContext('2d');
+  activeChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['EMI', 'Expenses', 'Surplus'],
+      datasets: [
+        {
+          data: [totalEmi, expenses, Math.max(0, surplus)],
+          backgroundColor: ['#ef4444', '#f59e0b', '#10b981'],
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      cutout: '75%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { boxWidth: 12 },
+        },
+      },
+    },
+  });
+}
+
+function renderIncome() {
+  document.getElementById('incomeList').innerHTML = engine.incomes
+    .map(
+      (inc, idx) => `
+      <div class="card" style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+      ">
+        <div>
+          <b>${inc.name}</b>
+          <p style="margin:0; font-size:11px; color:gray;">
+            Monthly
+          </p>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px;">
+          <b style="color:#10b981;">₹${fmt(inc.amount)}</b>
+
+          <span
+            onclick="editIncome(${idx})"
+            style="cursor:pointer; color:#4f46e5;">
+            ✎
+          </span>
+
+          <span
+            onclick="deleteIncome(${idx})"
+            style="cursor:pointer; color:#ef4444;">
+            ✖
+          </span>
+        </div>
+      </div>
+    `
+    )
+    .join('');
+}
+
+window.deleteIncome = (idx) => {
+  if (confirm('Remove income?')) {
+    engine.incomes.splice(idx, 1);
+    save();
+    renderIncome();
+  }
+};
+
+window.editIncome = (idx) => {
+  const inc = engine.incomes[idx];
+  if (!inc) return;
+
+  editingIncomeIdx = idx;
+
+  document.getElementById('incName').value = inc.name;
+  document.getElementById('incAmt').value = inc.amount;
+
+  document.getElementById('saveIncBtn').innerText = 'Update Income';
+};
+
+function renderExpenses() {
+  const list = document.getElementById('expenseList');
+  if (!list) return;
+
+  list.innerHTML = engine.expenses
+    .map(
+      (e, idx) => `
+      <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <b>${e.name}</b>
+          <p style="margin:0; font-size:11px; color:gray;">
+            ${e.frequency} • ₹${fmt(e.amount)} / 
+            ${
+              e.frequency === 'weekly'
+                ? 'week'
+                : e.frequency === 'daily'
+                ? 'day'
+                : 'month'
+            } 
+            ${
+              e.frequency === 'monthly'
+                ? ''
+                : `≈ ₹${fmt(e.monthlyValue())} / month`
+            }
+          </p>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span
+            onclick="editExpense(${idx})"
+            style="cursor:pointer; color:#4f46e5;">
+            ✎
+          </span>
+          <span
+            onclick="deleteExpense(${idx})"
+            style="cursor:pointer; color:#ef4444;">
+            ✖
+          </span>
+        </div>
+      </div>
+    `
+    )
+    .join('');
+}
+
+window.deleteExpense = (idx) => {
+  if (confirm('Delete this expense?')) {
+    engine.expenses.splice(idx, 1);
+    save();
+    renderExpenses();
+    renderDashboard();
+  }
+};
+
+window.editExpense = (idx) => {
+  const e = engine.expenses[idx];
+  if (!e) return;
+
+  editingExpenseIdx = idx;
+
+  document.getElementById('expName').value = e.name;
+  document.getElementById('expAmt').value = e.amount;
+  document.getElementById('expFreq').value = e.frequency;
+
+  document.getElementById('saveExpBtn').innerText = 'Update Expense';
+};
+
+document.getElementById('saveIncBtn').onclick = () => {
+  const name = val('incName');
+  const amount = num('incAmt');
+
+  if (!name || !amount) {
+    alert('Enter income name and amount');
+    return;
+  }
+
+  if (editingIncomeIdx !== null) {
+    // EDIT
+    engine.incomes[editingIncomeIdx].name = name;
+    engine.incomes[editingIncomeIdx].amount = amount;
+
+    editingIncomeIdx = null;
+    document.getElementById('saveIncBtn').innerText = 'Add Income';
+  } else {
+    // ADD
+    engine.addIncome(
+      new Income({
+        name,
+        amount,
+        frequency: 'monthly',
+      })
+    );
+  }
+
+  save();
+
+  document.getElementById('incName').value = '';
+  document.getElementById('incAmt').value = '';
+
+  renderIncome();
+  renderDashboard();
+};
+
+document.getElementById('saveExpBtn').onclick = () => {
+  const name = val('expName');
+  const amount = num('expAmt');
+  const frequency = val('expFreq');
+
+  if (!name || !amount) {
+    alert('Enter expense name and amount');
+    return;
+  }
+
+  if (editingExpenseIdx !== null) {
+    // EDIT
+    engine.expenses[editingExpenseIdx].name = name;
+    engine.expenses[editingExpenseIdx].amount = amount;
+    engine.expenses[editingExpenseIdx].frequency = frequency;
+
+    editingExpenseIdx = null;
+    document.getElementById('saveExpBtn').innerText = 'Add Expense';
+  } else {
+    // ADD
+    engine.addExpense(new Expense({ name, amount, frequency }));
+  }
+
+  save();
+
+  document.getElementById('expName').value = '';
+  document.getElementById('expAmt').value = '';
+  document.getElementById('expFreq').value = 'monthly';
+
+  renderExpenses();
+  renderDashboard();
+};
+
+function renderPayments() {
+  document.getElementById('payDebtSelect').innerHTML = engine.debts
+    .map((d) => `<option value="${d.id}">${d.name}</option>`)
+    .join('');
+}
+
+document.getElementById('payBtn').onclick = () => {
+  const debt = engine.debts.find((d) => d.id == val('payDebtSelect'));
+  const amount = num('payAmt');
+  const date = new Date(val('payDate') || new Date());
+
+  if (!debt || !amount) return;
+
+  debt.principal -= amount;
+
+  if (!debt.payments) debt.payments = [];
+  debt.payments.push({ id: Date.now(), date, amount });
+
+  save();
+
+  // 🔑 IMPORTANT
+  selectedDebtId = debt.id;
+
+  renderDashboard();
+  switchTab('debtDetail');
+};
+
+function renderDebtDetailTab() {
+  const sel = document.getElementById('detailSelect');
+  sel.innerHTML =
+    '<option value="">Choose Debt</option>' +
+    engine.debts
+      .map((d) => `<option value="${d.id}">${d.name}</option>`)
+      .join('');
+  if (selectedDebtId) {
+    sel.value = selectedDebtId;
+    updateHistoryTable();
+  }
+}
+
+document.getElementById('detailSelect').onchange = (e) => {
+  selectedDebtId = Number(e.target.value);
+  updateHistoryTable();
+};
+
+function updateHistoryTable() {
+  const debt = engine.debts.find((d) => d.id === selectedDebtId);
+  if (!debt || !debt.payments) return;
+
+  let runningBal =
+    debt.principal + debt.payments.reduce((s, p) => s + p.amount, 0);
+
+  document.getElementById('historyBody').innerHTML = debt.payments
+    .map((p, idx) => {
+      runningBal -= p.amount;
+
+      return `
+        <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <b>${new Date(p.date).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+            })}</b>
+            <p style="margin:0; font-size:11px; color:gray;">
+              Paid ₹${fmt(p.amount)}
+            </p>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:14px;">
+            <b style="color:#2563eb;">₹${fmt(Math.max(0, runningBal))}</b>
+            <span
+              onclick="deletePayment(${debt.id}, ${idx})"
+              style="cursor:pointer; color:#ef4444; font-size:18px;">
+              ✖
+            </span>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+window.deletePayment = (debtId, paymentIdx) => {
+  if (!confirm('Remove payment record?')) return;
+
+  const debt = engine.debts.find((d) => d.id === debtId);
+  if (!debt || !debt.payments) return;
+
+  const payment = debt.payments[paymentIdx];
+
+  // 🔁 Restore principal
+  debt.principal += payment.amount;
+
+  // Remove payment
+  debt.payments.splice(paymentIdx, 1);
+
+  save();
+
+  updateHistoryTable();
+  renderDashboard();
+};
+
+switchTab('dashboard');
