@@ -94,19 +94,98 @@ document.querySelector('#app').innerHTML = `
 
     <section id="debts" class="tab-content">
       <div class="card">
-        <h2 id="debtFormTitle" style="font-size:1.1rem; margin-top:0;">Add Debt</h2>
-        <input id="debtName" placeholder="Debt Name">
-        <input id="debtAmount" type="number" placeholder="Principal ₹">
-        <div style="display:flex; gap:10px; margin-top:10px;">
-           <input id="debtRate" type="number" placeholder="Rate %" style="flex:1">
-           <select id="interestType" style="flex:1"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select>
+        <h2 id="debtFormTitle" style="font-size:1.1rem; margin-top:0;">
+          Add Debt
+        </h2>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <input id="debtName" placeholder="Debt Name" />
+          <input id="debtAmount" type="number" placeholder="Principal ₹" />
         </div>
-        <input id="minEmi" type="number" placeholder="EMI Amount ₹" style="margin-top:10px;">
-        <button id="saveDebtBtn">Save Debt Account</button>
-        <button id="cancelDebtEdit" style="display:none; background:#ccc; margin-top:10px;">Cancel Edit</button>
+
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+          <select id="interestType">
+            <option value="">Select Interest Type</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+            <option value="oneTime">One-Time</option>
+            <option value="friendly">Friendly (No Interest)</option>
+          </select>
+
+          <select id="dailyInterestMode" style="display:none;">
+            <option value="">Interest Mode</option>
+            <option value="percentage">Percentage (%)</option>
+            <option value="fixed">Fixed Amount (₹ / day)</option>
+          </select>
+        </div>
+
+        <input
+          id="dailyInterestValue"
+          type="number"
+          placeholder="Interest value"
+          style="margin-top:8px; display:none;"
+        />
+
+
+        <!-- RATE % (monthly/yearly) -->
+        <input
+          id="debtRate"
+          type="number"
+          placeholder="Interest Rate %"
+          style="margin-top:10px; display:none;"
+        />
+
+        <!-- EMI -->
+        <input
+          id="minEmi"
+          type="number"
+          placeholder="EMI Amount ₹"
+          style="margin-top:10px; display:none;"
+        />
+
+        <!-- DATE RANGE -->
+        <div
+          id="dateRange"
+          style="
+            display:none;
+            margin-top:10px;
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:10px;
+          "
+        >
+          <div>
+            <label style="font-size:11px;">Start Date</label>
+            <input id="startDate" type="date" />
+          </div>
+
+          <div>
+            <label style="font-size:11px;">End Date</label>
+            <input id="endDate" type="date" />
+          </div>
+        </div>
+
+
+        <!-- ACTIONS -->
+        <button id="saveDebtBtn" style="margin-top:14px;">
+          Save Debt Account
+        </button>
+
+        <button
+          id="cancelDebtEdit"
+          style="display:none; background:#ccc; margin-top:10px;"
+        >
+          Cancel Edit
+        </button>
       </div>
+
+      <!-- DEBT LIST -->
       <div id="debtList"></div>
     </section>
+
 
     <section id="income" class="tab-content">
        <div class="card">
@@ -181,6 +260,8 @@ document.querySelector('#app').innerHTML = `
 
 /* ==================== 3. FUNCTIONS ==================== */
 
+initDebtFormHelpers();
+
 function switchTab(tabId) {
   document
     .querySelectorAll('.tab')
@@ -202,53 +283,146 @@ document
   .querySelectorAll('.tab')
   .forEach((btn) => (btn.onclick = () => switchTab(btn.dataset.tab)));
 
-// DEBT RENDER & ACTIONS
-function renderDebts() {
-  document.getElementById('debtList').innerHTML = engine.debts
-    .map(
-      (d) => `
-    <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <b>${d.name}</b>
-        <p style="margin:0; font-size:11px; color:gray;">Next EMI: ₹${fmt(
-          d.emiAmount
-        )}</p>
-      </div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <b style="color:var(--brand);">₹${fmt(d.summary().pendingPrincipal)}</b>
-        <div style="display:flex; gap:10px; font-size:14px;">
-           <span onclick="editDebt(${
-             d.id
-           })" style="cursor:pointer; color:#4f46e5;">✎</span>
-           <span onclick="deleteDebt(${
-             d.id
-           })" style="cursor:pointer; color:#ef4444;">✖</span>
-        </div>
-      </div>
-    </div>`
-    )
-    .join('');
-}
+  function renderDebts() {
+    document.getElementById('debtList').innerHTML = engine.debts
+      .map((d) => {
+        const s = d.summary();
+  
+        const interestPayable =
+          Math.max(0, s.repaymentAtEnd - s.initialPrincipal);
+  
+        const overdue = s.overdue;
+  
+        const overdueBadge = overdue
+          ? `<span style="
+              color:#dc2626;
+              font-size:11px;
+              font-weight:700;
+              margin-left:6px;
+            ">⚠ Overdue</span>`
+          : '';
+  
+        const endDateText = s.endDate
+          ? new Date(s.endDate).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            })
+          : '—';
+  
+        return `
+          <div class="card" style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            background:${overdue ? '#fee2e2' : 'var(--card)'};
+            border:${overdue ? '1px solid #fca5a5' : '1px solid var(--border)'};
+          ">
+            <div>
+              <b style="font-size:15px;">${d.name}</b>
+              ${overdueBadge}
+  
+              <p style="margin:4px 0 0; font-size:11px; color:#475569;">
+                End Date: <b>${endDateText}</b>
+              </p>
+  
+              <p style="margin:2px 0 0; font-size:11px;">
+                Interest:
+                <b style="color:#dc2626;">
+                  ₹${fmt(interestPayable)}
+                </b>
+              </p>
+  
+              <p style="margin:2px 0 0; font-size:11px; color:#475569;">
+                Total Payable:
+                <b>₹${fmt(s.repaymentAtEnd)}</b>
+              </p>
+            </div>
+  
+            <div style="display:flex; align-items:center; gap:12px;">
+              <b style="
+                font-size:15px;
+                color:${overdue ? '#dc2626' : 'var(--brand)'};
+              ">
+                ₹${fmt(s.pendingPrincipal)}
+              </b>
+  
+              <span
+                onclick="editDebt(${d.id})"
+                style="cursor:pointer; color:#4f46e5;">
+                ✎
+              </span>
+  
+              <span
+                onclick="deleteDebt(${d.id})"
+                style="cursor:pointer; color:#ef4444;">
+                ✖
+              </span>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+  
+  
 
-window.editDebt = (id) => {
-  const debtId = Number(id); // 🔑 FORCE NUMBER
-  const d = engine.debts.find((x) => x.id === debtId);
-  if (!d) return;
-
-  editingDebtId = debtId; // 🔑 STORE NUMBER
-
-  document.getElementById('debtFormTitle').innerText = 'Edit Debt Account';
-  document.getElementById('debtName').value = d.name;
-  document.getElementById('debtAmount').value = d.principal;
-  document.getElementById('debtRate').value = d.interestRate * 100;
-  document.getElementById('minEmi').value = d.emiAmount;
-  document.getElementById('cancelDebtEdit').style.display = 'block';
-
-  document.getElementById('debtFormTitle').scrollIntoView();
-
-  // ✅ Debug proof (remove later)
-  console.log('EDIT MODE:', editingDebtId);
-};
+  window.editDebt = (id) => {
+    const debtId = Number(id);
+    const d = engine.debts.find((x) => x.id === debtId);
+    if (!d) return;
+  
+    editingDebtId = debtId;
+  
+    // Title + buttons
+    document.getElementById('debtFormTitle').innerText = 'Edit Debt Account';
+    document.getElementById('cancelDebtEdit').style.display = 'block';
+  
+    // Basic fields
+    document.getElementById('debtName').value = d.name;
+    document.getElementById('debtAmount').value = d.initialPrincipal;
+  
+    // 🔑 Interest Type FIRST
+    const interestTypeEl = document.getElementById('interestType');
+    interestTypeEl.value = d.interestType || '';
+  
+    // 🔑 FORCE helper to run (this is the missing piece)
+    interestTypeEl.dispatchEvent(new Event('change'));
+  
+    // Daily interest
+    if (d.interestType === 'daily') {
+      document.getElementById('dailyInterestMode').value =
+        d.interestMode || '';
+      document.getElementById('dailyInterestValue').value =
+        d.interestValue || '';
+    }
+  
+    // Monthly / yearly
+    if (d.interestType === 'monthly' || d.interestType === 'yearly') {
+      document.getElementById('debtRate').value =
+        d.interestRate ? d.interestRate * 100 : '';
+      document.getElementById('minEmi').value = d.emiAmount || '';
+    }
+  
+    // Dates
+    if (d.startDate) {
+      document.getElementById('startDate').value =
+        new Date(d.startDate).toISOString().slice(0, 10);
+    }
+  
+    if (d.endDate) {
+      document.getElementById('endDate').value =
+        new Date(d.endDate).toISOString().slice(0, 10);
+    }
+  
+    // Scroll into view
+    document.getElementById('debtFormTitle').scrollIntoView({
+      behavior: 'smooth',
+    });
+  
+    console.log('EDIT MODE ACTIVE:', editingDebtId);
+  };
+  
 
 window.deleteDebt = (id) => {
   if (confirm('Delete this debt and all associated history?')) {
@@ -268,61 +442,124 @@ document.getElementById('cancelDebtEdit').onclick = () => {
 };
 
 document.getElementById('saveDebtBtn').onclick = () => {
-  const data = {
+  const interestType = val('interestType');
+
+  const debtData = {
     name: val('debtName'),
     principal: num('debtAmount'),
+    interestType,
+    interestMode: val('dailyInterestMode'),
+    interestValue: num('dailyInterestValue'),
     interestRate: num('debtRate') / 100,
-    interestType: val('interestType'),
     emiAmount: num('minEmi'),
+    startDate: val('startDate'),
+    endDate: val('endDate'),
     plan: 'custom',
   };
 
   if (editingDebtId !== null) {
+    // ✅ EDIT MODE
     const idx = engine.debts.findIndex((d) => d.id === editingDebtId);
+    if (idx === -1) return;
+
     const oldDebt = engine.debts[idx];
 
-    // 🔑 Rebuild a CLEAN Debt (edit = restructure)
-    const rebuilt = new Debt({
+    // 🔁 Replace debt object cleanly
+    const updatedDebt = new Debt({
       id: oldDebt.id,
-      name: data.name,
-      principal: data.principal,
-      interestRate: data.interestRate,
-      interestType: data.interestType,
-      plan: data.plan,
-      emiAmount: data.emiAmount,
-      startDate: oldDebt.startDate, // ✅ KEEP original start date
-      endDate: oldDebt.endDate ?? null,
+      ...debtData,
     });
 
-    // Policy: reset history on edit
-    rebuilt.payments = [];
-    rebuilt.interestPaid = 0;
+    engine.debts[idx] = updatedDebt;
 
-    engine.debts[idx] = rebuilt;
-
-    // exit edit mode
     editingDebtId = null;
     document.getElementById('debtFormTitle').innerText = 'Add Debt';
     document.getElementById('cancelDebtEdit').style.display = 'none';
   } else {
-    engine.addDebt({
-      ...data,
-      startDate: new Date(), // only for NEW debt
-    });
+    // ➕ ADD MODE
+    engine.addDebt(debtData);
   }
 
   save();
-
-  // clear form
-  ['debtName', 'debtAmount', 'debtRate', 'minEmi'].forEach(
-    (id) => (document.getElementById(id).value = '')
-  );
-
-  // 🔑 FULL re-render
+  clearDebtForm();
   renderDebts();
-  renderPayments();
   renderDashboard();
 };
+
+function clearDebtForm() {
+  [
+    'debtName',
+    'debtAmount',
+    'debtRate',
+    'minEmi',
+    'dailyInterestValue',
+    'startDate',
+    'endDate',
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+
+  document.getElementById('interestType').value = '';
+  document.getElementById('dailyInterestMode').value = '';
+
+  // 🔑 hide dynamic fields
+  document.getElementById('dailyInterestMode').style.display = 'none';
+  document.getElementById('dailyInterestValue').style.display = 'none';
+  document.getElementById('dateRange').style.display = 'none';
+  document.getElementById('minEmi').style.display = 'none';
+  document.getElementById('debtRate').style.display = 'none';
+
+  editingDebtId = null;
+  document.getElementById('debtFormTitle').innerText = 'Add Debt';
+  document.getElementById('cancelDebtEdit').style.display = 'none';
+}
+
+
+
+function initDebtFormHelpers() {
+  const interestTypeEl = document.getElementById('interestType');
+  const dailyModeEl = document.getElementById('dailyInterestMode');
+  const dailyValueEl = document.getElementById('dailyInterestValue');
+  const dateRangeEl = document.getElementById('dateRange');
+  const emiEl = document.getElementById('minEmi');
+  const rateEl = document.getElementById('debtRate');
+
+  if (!interestTypeEl) return;
+
+  interestTypeEl.onchange = () => {
+    const type = interestTypeEl.value;
+
+    // 🔁 RESET EVERYTHING FIRST
+    dailyModeEl.style.display = 'none';
+    dailyValueEl.style.display = 'none';
+    dateRangeEl.style.display = 'none';
+    emiEl.style.display = 'none';
+    rateEl.style.display = 'none';
+
+    dailyModeEl.value = '';
+    dailyValueEl.value = '';
+
+    // ✅ DAILY
+    if (type === 'daily') {
+      dailyModeEl.style.display = 'block';
+      dailyValueEl.style.display = 'block';
+      dateRangeEl.style.display = 'grid';
+    }
+
+    // ✅ WEEKLY / MONTHLY / YEARLY
+    if (type === 'weekly' || type === 'monthly' || type === 'yearly') {
+      rateEl.style.display = 'block';
+      emiEl.style.display = 'block';
+    }
+
+    // ✅ ONE-TIME / FRIENDLY
+    if (type === 'oneTime' || type === 'friendly') {
+      dateRangeEl.style.display = 'grid';
+    }
+  };
+}
+
 
 function renderDashboard() {
   const income = engine.incomes.reduce((sum, i) => sum + (i.amount || 0), 0);

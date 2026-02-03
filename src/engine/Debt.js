@@ -3,88 +3,141 @@ export class Debt {
     id,
     name,
     principal,
-    interestRate,
-    interestType, // daily | monthly | yearly
-    plan, // emiDaily | emiWeekly | emiMonthly | interestOnly | oneTime
+
+    interestType,      // daily | weekly | monthly | yearly | oneTime | friendly
+    interestMode,      // fixed | percentage (daily only)
+    interestValue,     // ₹ per day OR % per day
+    interestRate,      // monthly/yearly %
+
+    plan,
     emiAmount,
+
     startDate,
-    endDate, // Added for Daily repayment calculation
+    endDate,
   }) {
     this.id = id;
     this.name = name;
+
     this.initialPrincipal = principal;
     this.principal = principal;
-    this.interestRate = interestRate;
-    this.interestType = interestType || 'monthly'; // Default to monthly
-    this.plan = plan;
-    this.emiAmount = emiAmount || 0;
-    this.startDate = new Date(startDate);
-    this.endDate = endDate ? new Date(endDate) : null; // Store end date if provided
-    this.lastPaymentDate = new Date(startDate);
+
+    this.interestType = interestType || 'monthly';
+    this.interestMode = interestMode || null;
+    this.interestValue = Number(interestValue || 0);
+    this.interestRate = Number(interestRate || 0);
+
+    this.plan = plan || 'custom';
+    this.emiAmount = Number(emiAmount || 0);
+
+    this.startDate = startDate ? new Date(startDate) : new Date();
+    this.endDate = endDate ? new Date(endDate) : null;
+    this.lastPaymentDate = new Date(this.startDate);
+
     this.interestPaid = 0;
     this.payments = [];
   }
 
-  // Helper to get exact days between two dates
-  _daysBetween(d1, d2) {
-    const diff = new Date(d2) - new Date(d1);
-    return Math.max(0, Math.floor(diff / 86400000));
+  /* ==================== HELPERS ==================== */
+
+  _daysInclusive(d1, d2) {
+    const ONE_DAY = 1000 * 60 * 60 * 24;
+    const start = new Date(d1);
+    const end = new Date(d2);
+    start.setHours(0,0,0,0);
+    end.setHours(0,0,0,0);
+    return Math.floor((end - start) / ONE_DAY) + 1;
   }
+
+  _daysBetween(d1, d2) {
+    return Math.max(
+      0,
+      Math.floor((new Date(d2) - new Date(d1)) / 86400000)
+    );
+  }
+
+  isOverdue() {
+    return (
+      !!this.endDate &&
+      this.principal > 0 &&
+      new Date() > this.endDate
+    );
+  }
+
+  /* ==================== CORE CALCULATIONS ==================== */
 
   calculateRepaymentAtEnd() {
-    // If no end date, there is no "end" to calculate for
-    if (!this.endDate || this.endDate <= this.startDate)
+    if (!this.endDate || this.endDate <= this.startDate) {
       return this.initialPrincipal;
+    }
 
-    const days = this._daysBetween(this.startDate, this.endDate);
+    const days = this._daysInclusive(this.startDate, this.endDate);
     let interest = 0;
 
-    // Logic for daily/monthly/yearly projection
+    // DAILY
     if (this.interestType === 'daily') {
-      interest = this.principal * this.interestRate * days;
-    } else if (this.interestType === 'monthly') {
-      // Standardize month to 30.44 days
-      interest = this.initialPrincipal * this.interestRate * (days / 30.44);
-    } else if (this.interestType === 'yearly') {
-      interest = this.initialPrincipal * (this.interestRate / 365) * days;
+      if (this.interestMode === 'fixed') {
+        interest = this.interestValue * days;
+      } else if (this.interestMode === 'percentage') {
+        interest =
+          (this.initialPrincipal * this.interestValue * days) / 100;
+      }
     }
 
-    return this.initialPrincipal + interest;
+    // MONTHLY
+    else if (this.interestType === 'monthly') {
+      interest =
+        this.initialPrincipal *
+        this.interestRate *
+        (days / 30.44);
+    }
+
+    // YEARLY
+    else if (this.interestType === 'yearly') {
+      interest =
+        this.initialPrincipal *
+        (this.interestRate / 365) *
+        days;
+    }
+
+    // FRIENDLY / ONE-TIME
+    return Math.round(this.initialPrincipal + Math.max(0, interest));
   }
 
-  // Calculates interest accrued based on the interest type for a given period
   _interestForPeriod(periods = 1) {
     if (this.interestType === 'daily') {
-      return this.principal * this.interestRate * periods;
+      if (this.interestMode === 'percentage') {
+        return (this.principal * this.interestValue * periods) / 100;
+      }
+      if (this.interestMode === 'fixed') {
+        return this.interestValue * periods;
+      }
     }
+
     if (this.interestType === 'monthly') {
       return this.principal * this.interestRate * periods;
     }
+
     if (this.interestType === 'yearly') {
       return this.principal * (this.interestRate / 365) * periods;
     }
+
     return 0;
   }
 
   applyPayment(amount, date = new Date()) {
-    if (this.principal <= 0 && amount <= 0) return;
+    if (!amount || amount <= 0) return;
 
     const payDate = new Date(date);
-    let periods = 1;
-
-    if (this.interestType === 'daily' || this.interestType === 'yearly') {
-      periods = this._daysBetween(this.lastPaymentDate, payDate);
-    } else {
-      periods = Math.max(
-        1,
-        this._daysBetween(this.lastPaymentDate, payDate) / 30.44
-      );
-    }
+    const periods =
+      this.interestType === 'daily'
+        ? this._daysBetween(this.lastPaymentDate, payDate)
+        : Math.max(1, this._daysBetween(this.lastPaymentDate, payDate) / 30.44);
 
     const interest = this._interestForPeriod(periods);
     this.interestPaid += interest;
 
     let remaining = amount;
+
     if (remaining >= interest) {
       remaining -= interest;
       this.principal = Math.max(0, this.principal - remaining);
@@ -96,12 +149,10 @@ export class Debt {
     this.payments.push({ amount, date: payDate });
   }
 
-  // Inside your Debt class in engine/Debt.js
   expectedIntervalDays() {
-    // If interestType is daily, we assume the plan is daily payments
-    if (this.plan === 'emiDaily' || this.interestType === 'daily') return 1;
+    if (this.interestType === 'daily') return 1;
     if (this.plan === 'emiWeekly') return 7;
-    return 30; // Default monthly
+    return 30;
   }
 
   predictPayoff(fromDate = new Date()) {
@@ -112,14 +163,7 @@ export class Debt {
     const interval = this.expectedIntervalDays();
 
     while (tempPrincipal > 0.01 && guard++ < 1200) {
-      let interest = 0;
-      if (this.interestType === 'daily') {
-        interest = tempPrincipal * this.interestRate * interval;
-      } else if (this.interestType === 'monthly') {
-        interest = tempPrincipal * this.interestRate * (interval / 30.44);
-      } else if (this.interestType === 'yearly') {
-        interest = tempPrincipal * (this.interestRate / 365) * interval;
-      }
+      const interest = this._interestForPeriod(interval);
 
       if (this.emiAmount <= interest && this.plan !== 'oneTime') {
         return {
@@ -134,9 +178,9 @@ export class Debt {
       if (this.plan === 'oneTime') {
         tempPrincipal += interest;
       } else {
-        const principalPaid = Math.max(0, this.emiAmount - interest);
-        tempPrincipal -= principalPaid;
+        tempPrincipal -= Math.max(0, this.emiAmount - interest);
       }
+
       date.setDate(date.getDate() + interval);
     }
 
@@ -148,45 +192,57 @@ export class Debt {
 
   summary() {
     const payoff = this.predictPayoff();
-
-    // Use predicted interest if it's a standard EMI,
-    // otherwise use the fixed maturity date calculation.
-    const totalInterest =
-      this.plan !== 'oneTime' && payoff.interestPaid > 0
-        ? payoff.interestPaid
-        : this.calculateRepaymentAtEnd() - this.initialPrincipal;
+    const repaymentAtEnd = this.calculateRepaymentAtEnd();
 
     return {
       id: this.id,
       name: this.name,
+
       startDate: this.startDate,
       endDate: this.endDate,
-      repaymentAtEnd: this.initialPrincipal + totalInterest, // Dynamic total
+
       initialPrincipal: this.initialPrincipal,
       pendingPrincipal: Math.round(this.principal),
-      interestPaid: Math.round(this.interestPaid),
-      interestRate: this.interestRate,
+
+      repaymentAtEnd,
+      interestPayable: Math.max(
+        0,
+        repaymentAtEnd - this.initialPrincipal
+      ),
+
       interestType: this.interestType,
+      interestMode: this.interestMode,
+      interestValue: this.interestValue,
+
       payoffDate: payoff.payoffDate,
       neverCloses: payoff.neverCloses || false,
+      overdue: this.isOverdue(),
     };
   }
+
+  /* ==================== PERSISTENCE ==================== */
 
   toJSON() {
     return {
       id: this.id,
       name: this.name,
-      initialPrincipal: this.initialPrincipal,
       principal: this.principal,
-      interestRate: this.interestRate,
+      initialPrincipal: this.initialPrincipal,
+
       interestType: this.interestType,
+      interestMode: this.interestMode,
+      interestValue: this.interestValue,
+      interestRate: this.interestRate,
+
       plan: this.plan,
       emiAmount: this.emiAmount,
+
       startDate: this.startDate.toISOString(),
-      endDate: this.endDate ? this.endDate.toISOString() : null, // Added
+      endDate: this.endDate ? this.endDate.toISOString() : null,
       lastPaymentDate: this.lastPaymentDate.toISOString(),
+
       interestPaid: this.interestPaid,
-      payments: this.payments.map((p) => ({
+      payments: this.payments.map(p => ({
         amount: p.amount,
         date: p.date.toISOString(),
       })),
@@ -194,48 +250,16 @@ export class Debt {
   }
 
   static fromJSON(raw) {
-    const d = new Debt({
-      id: raw.id,
-      name: raw.name,
-      principal: raw.principal,
-      interestRate: raw.interestRate,
-      interestType: raw.interestType,
-      plan: raw.plan,
-      emiAmount: raw.emiAmount,
-      startDate: raw.startDate,
-      endDate: raw.endDate, // Added
-    });
-
-    d.initialPrincipal = raw.initialPrincipal;
+    const d = new Debt(raw);
     d.lastPaymentDate = new Date(raw.lastPaymentDate);
-    d.interestPaid = raw.interestPaid;
+    d.interestPaid = raw.interestPaid || 0;
 
     if (raw.payments) {
-      raw.payments.forEach((p) =>
+      raw.payments.forEach(p =>
         d.payments.push({ amount: p.amount, date: new Date(p.date) })
       );
     }
+
     return d;
-  }
-
-  recalculateFromPayments() {
-    this.principal = this.initialPrincipal;
-    this.interestPaid = 0;
-    this.lastPaymentDate = new Date(this.startDate);
-    const savedPayments = [...this.payments].sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
-    );
-    this.payments = [];
-    savedPayments.forEach((p) => this.applyPayment(p.amount, p.date));
-  }
-
-  deletePayment(index) {
-    this.payments.splice(index, 1);
-    this.recalculateFromPayments();
-  }
-
-  updatePayment(index, amount, date) {
-    this.payments[index] = { amount, date: new Date(date) };
-    this.recalculateFromPayments();
   }
 }
