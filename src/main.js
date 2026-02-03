@@ -45,9 +45,22 @@ function save() {
 /* ==================== 2. UI TEMPLATE ==================== */
 document.querySelector('#app').innerHTML = `
 <div class="app">
-  <header style="padding: 20px 0; text-align: center; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); margin-bottom: 20px; border-radius: 0 0 24px 24px;">
-    <h1 style="margin: 0; font-size: 24px; color: #f8fafc; font-weight: 800;">Equi<span style="color: #38bdf8;">Balance</span></h1>
-  </header>
+<header style="padding: 20px 0; text-align: center; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); margin-bottom: 20px; border-radius: 0 0 24px 24px;">
+<h1 style="margin: 0; font-size: 24px; color: #f8fafc; font-weight: 800;">
+  Equi<span style="color: #38bdf8;">Balance</span>
+</h1>
+
+<p style="
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #c7d2fe;
+  opacity: 0.9;
+  font-weight: 500;
+">
+  Balance your debts. Control your future.
+</p>
+</header>
+
 
   <main>
     <section id="dashboard" class="tab-content">
@@ -331,7 +344,16 @@ function renderDashboard() {
   document.getElementById('dashInc').innerText = `₹${fmt(income)}`;
   document.getElementById('dashExp').innerText = `₹${fmt(expenses)}`;
   document.getElementById('dashEmi').innerText = `₹${fmt(totalEmi)}`;
-  document.getElementById('dashSurplus').innerText = `₹${fmt(surplus)}`;
+  const surplusEl = document.getElementById('dashSurplus');
+  surplusEl.innerText = `₹${fmt(surplus)}`;
+
+  if (surplus > 0) {
+    surplusEl.style.color = '#10b981'; // green
+  } else if (surplus < 0) {
+    surplusEl.style.color = '#ef4444'; // red
+  } else {
+    surplusEl.style.color = '#64748b'; // neutral gray
+  }
 
   if (activeChart) activeChart.destroy();
 
