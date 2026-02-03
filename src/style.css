@@ -1,5 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap');
 
+/* ================== THEME ================== */
 :root {
   --brand: #6366f1;
   --brand-light: #eef2ff;
@@ -14,12 +16,15 @@
   --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
 }
 
+/* ================== GLOBAL RESET ================== */
 * {
-  box-sizing: border-box; /* Crucial fix: prevents padding from expanding element width */
+  box-sizing: border-box;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', sans-serif;
   background: var(--bg);
   color: var(--text-main);
   margin: 0;
@@ -31,10 +36,10 @@ body {
   margin: 0 auto;
 }
 
+/* ================== HEADER ================== */
 header {
   padding: 24px;
   background: var(--card);
-  text-align: left;
   border-bottom: 1px solid var(--border);
 }
 
@@ -45,7 +50,7 @@ header h1 {
   color: var(--brand);
 }
 
-/* NAVIGATION */
+/* ================== NAV ================== */
 .tabs {
   position: fixed;
   bottom: 0;
@@ -80,18 +85,17 @@ header h1 {
 .tab svg {
   width: 22px;
   height: 22px;
-  stroke-width: 2px;
 }
 
 .tab.active {
   color: var(--brand);
 }
 
-/* VISIBILITY LOGIC */
+/* ================== TABS ================== */
 .tab-content {
   display: none !important;
-  padding: 16px; /* Reduced padding for mobile room */
-  animation: slideUp 0.4s ease-out;
+  padding: 16px;
+  animation: slideUp 0.35s ease-out;
 }
 
 .tab-content.active {
@@ -101,7 +105,7 @@ header h1 {
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(15px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -109,12 +113,11 @@ header h1 {
   }
 }
 
-/* CARDS & GRIDS */
+/* ================== CARDS ================== */
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-bottom: 12px;
 }
 
 .card {
@@ -124,83 +127,139 @@ header h1 {
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   margin-bottom: 12px;
-  width: 100%;
-  position: relative;
-  overflow: hidden; /* Fix: prevents child elements from leaking out */
 }
 
 .card.primary {
   background: var(--brand);
-  color: white;
+  color: #fff;
   border: none;
 }
 
-/* FIX: DATE OVERLAP & LAYOUT */
-.flex-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 10px;
-  flex-wrap: wrap; /* Fix: wraps dates to next line if screen is too narrow */
-}
-
-.flex-item {
-  flex: 1;
-  min-width: 140px; /* Fix: ensures date inputs remain readable */
-}
-
-.input-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-  display: block;
-}
-
-/* INPUTS & BUTTONS */
+/* ================== INPUTS ================== */
 input,
-select {
+select,
+textarea {
   width: 100%;
   padding: 14px;
-  margin-top: 4px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  font-family: inherit;
   font-size: 14px;
-  background-color: #fcfcfc;
+  background: #fcfcfc;
 }
 
-input:focus {
-  outline: 2px solid var(--brand-light);
+input:focus,
+textarea:focus {
+  outline: none;
   border-color: var(--brand);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
+/* ================== BUTTONS ================== */
 button:not(.tab) {
-  margin-top: 16px;
   width: 100%;
   padding: 16px;
   border-radius: 16px;
   border: none;
   background: var(--brand);
-  color: white;
+  color: #fff;
   font-weight: 700;
   cursor: pointer;
-  transition: 0.2s;
 }
 
 button:not(.tab):active {
   transform: scale(0.98);
 }
 
-/* TABLES & LISTS */
-.list-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
+/* ================== AI FINANCIAL ADVISOR ================== */
+
+.ai-card {
+  border-radius: 22px;
+  padding: 18px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
 }
 
-.list-item:last-child {
-  border-bottom: none;
+.ai-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ai-avatar {
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 26px;
+  padding: 10px;
+  border-radius: 14px;
+}
+
+.ai-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.ai-header p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ===== AI Title Font Override ===== */
+.ai-header h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: rgb(0, 47, 255) !important;
+}
+
+/* AI TEXTAREA */
+#aiQuestion {
+  margin-top: 12px;
+  min-height: 70px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+#aiQuestion::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* AI BUTTON */
+.ai-btn {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  font-size: 15px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+}
+
+/* AI ANSWER */
+.ai-answer {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.ai-answer strong {
+  font-weight: 700;
+}
+
+.ai-answer ul {
+  padding-left: 18px;
+  margin: 8px 0;
+}
+
+.ai-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
 }

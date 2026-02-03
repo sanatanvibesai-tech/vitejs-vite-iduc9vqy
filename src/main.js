@@ -3,6 +3,7 @@ import { FinanceEngine } from './engine/FinanceEngine.js';
 import { Income } from './engine/Income.js';
 import { Expense } from './engine/Expense.js';
 import { Debt } from './engine/Debt.js';
+import { runFinanceRules, askAIFinanceAdvisor } from './engine/aiRules.js';
 
 /* ==================== 1. STATE & STORAGE ==================== */
 let activeChart = null;
@@ -90,6 +91,37 @@ document.querySelector('#app').innerHTML = `
        <div class="card">
          <div style="height: 220px; width: 100%; position: relative;"><canvas id="ctxChart"></canvas></div>
        </div>
+
+       <div class="card ai-card">
+        <div class="ai-header">
+          <div class="ai-avatar">🤖</div>
+          <div>
+            <h3>AI Financial Advisor</h3>
+            <p>Your personal debt & EMI assistant</p>
+          </div>
+        </div>
+
+        <div class="ai-input-wrap">
+          <textarea
+            id="aiQuestion"
+            placeholder="Ask things like:
+      • When will I be debt free?
+      • Can I afford a new EMI?
+      • How do I reduce interest faster?"
+          ></textarea>
+
+          <button id="askAiBtn" class="ai-btn">
+            Ask Advisor →
+          </button>
+        </div>
+
+        <div id="aiAnswer" class="ai-answer"></div>
+
+        <div class="ai-hint">
+          ℹ Uses your income, expenses, debts & rules
+        </div>
+      </div>
+
     </section>
 
     <section id="debts" class="tab-content">
@@ -271,7 +303,57 @@ document.querySelector('#app').innerHTML = `
 </div>
 `;
 
+initAiAgent();
 /* ==================== 3. FUNCTIONS ==================== */
+
+function detectIntent(question) {
+  const q = question.toLowerCase();
+
+  if (q.includes('when') && q.includes('debt')) return 'DEBT_TIMELINE';
+  if (q.includes('increase') || q.includes('reduce')) return 'WHAT_IF';
+  if (q.includes('emi')) return 'EMI_ADVICE';
+  if (q.includes('risk')) return 'RISK_CHECK';
+
+  return 'GENERAL';
+}
+
+function initAiAgent() {
+  const btn = document.getElementById('askAiBtn');
+  if (!btn) {
+    console.warn('AI button not found in DOM');
+    return;
+  }
+
+  btn.onclick = async () => {
+    const question = document.getElementById('aiQuestion').value.trim();
+    if (!question) return;
+  
+    const answerEl = document.getElementById('aiAnswer');
+    answerEl.innerHTML = '<span>🤖 Thinking...</span>'; // Use innerHTML to allow icons
+  
+    try {
+      const rules = runFinanceRules(engine);
+      const intent = detectIntent(question);
+  
+      // REMOVE the "return" inside the intent check. 
+      // Instead, let the AI handle the response using these rules.
+      const answer = await askAIFinanceAdvisor(question, {
+        ...rules,
+        intent,
+        // Adding a random seed or timestamp helps prevent cached/repetitive AI responses
+        salt: Math.random() 
+      });
+  
+      // Use innerHTML so the AI can return formatted suggestions
+      answerEl.innerHTML = answer; 
+      
+    } catch (e) {
+      console.error("AI Error:", e);
+      answerEl.innerText = "I'm having trouble connecting. Based on your rules, your risk is " + rules.summary.riskLevel;
+    }
+  };
+}
+
 
 initDebtFormHelpers();
 

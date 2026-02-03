@@ -7,17 +7,32 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- PWA manifest (optional for now) -->
+    <!-- ================= Fonts ================= -->
+    <!-- Inter font for modern fintech UI -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- ================= PWA ================= -->
     <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- ================= Charts ================= -->
+    <!-- Chart.js (global for dashboard charts) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Vite will handle CSS import via main.js -->
+
+    <!-- NOTE:
+      CSS is imported via main.js (Vite standard)
+    -->
   </head>
 
   <body>
-    <!-- Vite app root -->
+    <!-- ================= App Root ================= -->
     <div id="app"></div>
 
-    <!-- IMPORTANT: Vite entry point -->
+    <!-- ================= Vite Entry ================= -->
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
