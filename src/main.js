@@ -104,7 +104,11 @@ document.querySelector('#app').innerHTML = `
         </div>
 
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+        <!-- INTEREST TYPE ROW -->
+        <div
+          id="interestRow"
+          style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;"
+        >
           <select id="interestType">
             <option value="">Select Interest Type</option>
             <option value="daily">Daily</option>
@@ -115,20 +119,29 @@ document.querySelector('#app').innerHTML = `
             <option value="friendly">Friendly (No Interest)</option>
           </select>
 
+          <!-- DAILY: interest mode -->
           <select id="dailyInterestMode" style="display:none;">
             <option value="">Interest Mode</option>
             <option value="percentage">Percentage (%)</option>
             <option value="fixed">Fixed Amount (₹ / day)</option>
           </select>
+
+          <!-- ONE-TIME: interest amount -->
+          <input
+            id="oneTimeInterestValue"
+            type="number"
+            placeholder="Interest Amount ₹"
+            style="display:none;"
+          />
         </div>
 
+        <!-- DAILY interest value (full width) -->
         <input
           id="dailyInterestValue"
           type="number"
           placeholder="Interest value"
           style="margin-top:8px; display:none;"
         />
-
 
         <!-- RATE % (monthly/yearly) -->
         <input
@@ -371,7 +384,11 @@ document
     const debtId = Number(id);
     const d = engine.debts.find((x) => x.id === debtId);
     if (!d) return;
-  
+    if (d.interestType === 'oneTime') {
+      document.getElementById('oneTimeInterestValue').value =
+        d.interestValue || '';
+    }
+    
     editingDebtId = debtId;
   
     // Title + buttons
@@ -444,39 +461,47 @@ document.getElementById('cancelDebtEdit').onclick = () => {
 document.getElementById('saveDebtBtn').onclick = () => {
   const interestType = val('interestType');
 
+  let interestMode = null;
+  let interestValue = 0;
+  let interestRate = 0;
+
+  // DAILY
+  if (interestType === 'daily') {
+    interestMode = val('dailyInterestMode');
+    interestValue = num('dailyInterestValue');
+  }
+
+  // ONE-TIME ✅ FIX
+  if (interestType === 'oneTime') {
+    interestValue = num('oneTimeInterestValue');
+  }
+
+  // MONTHLY / YEARLY
+  if (interestType === 'monthly' || interestType === 'yearly') {
+    interestRate = num('debtRate') / 100;
+  }
+
   const debtData = {
     name: val('debtName'),
     principal: num('debtAmount'),
+
     interestType,
-    interestMode: val('dailyInterestMode'),
-    interestValue: num('dailyInterestValue'),
-    interestRate: num('debtRate') / 100,
+    interestMode,
+    interestValue,
+    interestRate,
+
     emiAmount: num('minEmi'),
     startDate: val('startDate'),
     endDate: val('endDate'),
+
     plan: 'custom',
   };
 
   if (editingDebtId !== null) {
-    // ✅ EDIT MODE
-    const idx = engine.debts.findIndex((d) => d.id === editingDebtId);
-    if (idx === -1) return;
-
-    const oldDebt = engine.debts[idx];
-
-    // 🔁 Replace debt object cleanly
-    const updatedDebt = new Debt({
-      id: oldDebt.id,
-      ...debtData,
-    });
-
-    engine.debts[idx] = updatedDebt;
-
+    const idx = engine.debts.findIndex(d => d.id === editingDebtId);
+    engine.debts[idx] = new Debt({ id: editingDebtId, ...debtData });
     editingDebtId = null;
-    document.getElementById('debtFormTitle').innerText = 'Add Debt';
-    document.getElementById('cancelDebtEdit').style.display = 'none';
   } else {
-    // ➕ ADD MODE
     engine.addDebt(debtData);
   }
 
@@ -521,24 +546,26 @@ function initDebtFormHelpers() {
   const interestTypeEl = document.getElementById('interestType');
   const dailyModeEl = document.getElementById('dailyInterestMode');
   const dailyValueEl = document.getElementById('dailyInterestValue');
+  const oneTimeValueEl = document.getElementById('oneTimeInterestValue');
+
   const dateRangeEl = document.getElementById('dateRange');
   const emiEl = document.getElementById('minEmi');
   const rateEl = document.getElementById('debtRate');
 
-  if (!interestTypeEl) return;
-
   interestTypeEl.onchange = () => {
     const type = interestTypeEl.value;
 
-    // 🔁 RESET EVERYTHING FIRST
+    // 🔁 RESET ALL
     dailyModeEl.style.display = 'none';
     dailyValueEl.style.display = 'none';
+    oneTimeValueEl.style.display = 'none';
     dateRangeEl.style.display = 'none';
     emiEl.style.display = 'none';
     rateEl.style.display = 'none';
 
     dailyModeEl.value = '';
     dailyValueEl.value = '';
+    oneTimeValueEl.value = '';
 
     // ✅ DAILY
     if (type === 'daily') {
@@ -547,18 +574,25 @@ function initDebtFormHelpers() {
       dateRangeEl.style.display = 'grid';
     }
 
-    // ✅ WEEKLY / MONTHLY / YEARLY
-    if (type === 'weekly' || type === 'monthly' || type === 'yearly') {
+    // ✅ ONE-TIME
+    if (type === 'oneTime') {
+      oneTimeValueEl.style.display = 'block';
+      dateRangeEl.style.display = 'grid';
+    }
+
+    // ✅ MONTHLY / YEARLY / WEEKLY
+    if (type === 'monthly' || type === 'yearly' || type === 'weekly') {
       rateEl.style.display = 'block';
       emiEl.style.display = 'block';
     }
 
-    // ✅ ONE-TIME / FRIENDLY
-    if (type === 'oneTime' || type === 'friendly') {
+    // ✅ FRIENDLY
+    if (type === 'friendly') {
       dateRangeEl.style.display = 'grid';
     }
   };
 }
+
 
 
 function renderDashboard() {
